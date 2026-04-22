@@ -7,6 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Changes
 
 - Matrix: require full cross-signing identity trust for self-device verification and add `openclaw matrix verify self` so operators can establish that trust from the CLI. (#70401) Thanks @gumadeiras.
+- Security/SSRF: add network-level SSRF protection via a Caddy forward proxy sidecar that blocks outbound connections to private/internal IP ranges at time-of-use, eliminating the DNS rebinding TOCTOU window in application-level DNS pinning. Dual-stack enforcement covers both `fetch()`/undici and `node:http`/`node:https` stacks, with graceful degradation when Caddy is unavailable. (#70044) Thanks @jesse-merhi.
 
 ### Fixes
 
