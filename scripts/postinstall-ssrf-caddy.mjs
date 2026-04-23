@@ -84,7 +84,6 @@ export function computeCachePaths({ homeDir, version, platform = process.platfor
     binDir,
     targetPath: join(binDir, targetName),
     versionedPath: join(binDir, versionedName),
-    versionedName,
   };
 }
 
@@ -226,15 +225,14 @@ export function parseChecksum(body, assetName) {
  */
 export function ensureSymlink(targetPath, linkPath) {
   try {
-    if (fs.existsSync(linkPath) || fs.lstatSync(linkPath, { throwIfNoEntry: false })) {
-      try {
-        fs.unlinkSync(linkPath);
-      } catch {
-        // ignore — overwritten below
-      }
+    // lstatSync won't follow symlinks, so it detects broken symlinks too.
+    // throwIfNoEntry: false returns undefined when the path doesn't exist.
+    if (fs.lstatSync(linkPath, { throwIfNoEntry: false })) {
+      fs.unlinkSync(linkPath);
     }
   } catch {
-    // ignore — link did not exist
+    // ignore — unlink failures are fine; symlinkSync below will throw if
+    // the path truly can't be replaced.
   }
   try {
     fs.symlinkSync(targetPath, linkPath);

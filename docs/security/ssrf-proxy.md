@@ -95,7 +95,8 @@ If you need a custom build (different Caddy version, additional plugins, an unsu
 
 ```bash
 xcaddy build --with github.com/caddyserver/forwardproxy@caddy2
-sudo mv caddy /usr/local/bin/caddy
+mkdir -p ~/.openclaw/bin
+mv caddy ~/.openclaw/bin/caddy-ssrf
 ```
 
 **Option 2 — Download a pre-built binary:**
