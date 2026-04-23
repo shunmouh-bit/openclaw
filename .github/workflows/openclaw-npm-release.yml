@@ -276,10 +276,21 @@ jobs:
             exit 1
           fi
 
+  build_caddy_ssrf:
+    # Rebuild the Caddy + forwardproxy binaries for the SSRF proxy on every
+    # release. If the build fails the release fails — we never ship a
+    # postinstall that references binaries that can't be built.
+    if: ${{ !inputs.preflight_only }}
+    uses: ./.github/workflows/build-caddy-ssrf.yml
+    permissions:
+      contents: write
+    with:
+      release: true
+
   publish_openclaw_npm:
     # KEEP THE REAL RELEASE/PUBLISH PATH ON A GITHUB-HOSTED RUNNER.
     # npm trusted publishing + provenance requires this to stay on ubuntu-latest.
-    needs: [validate_publish_request]
+    needs: [validate_publish_request, build_caddy_ssrf]
     if: ${{ !inputs.preflight_only }}
     runs-on: ubuntu-latest
     environment: npm-release

@@ -7,6 +7,7 @@ name: Build Caddy SSRF Proxy Binaries
 #
 # Triggers:
 #   * `workflow_dispatch` — manual run; takes an optional `version` override.
+#   * `workflow_call`     — called by openclaw-npm-release.yml during every release.
 #   * `push` of a tag matching `caddy-ssrf-v*` — automated release flow.
 #
 # The version is sourced from `scripts/caddy-ssrf-version.txt` so the JS
@@ -14,6 +15,17 @@ name: Build Caddy SSRF Proxy Binaries
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Caddy version to build (defaults to scripts/caddy-ssrf-version.txt)"
+        required: false
+        type: string
+      release:
+        description: "Create / upload to a GitHub release"
+        required: false
+        type: boolean
+        default: true
+  workflow_call:
     inputs:
       version:
         description: "Caddy version to build (defaults to scripts/caddy-ssrf-version.txt)"
