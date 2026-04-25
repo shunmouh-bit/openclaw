@@ -21,13 +21,13 @@ describe("SsrFProxyConfigSchema", () => {
     });
   });
 
-  it("rejects HTTPS proxy URLs because the node:http routing layer requires HTTP proxies", () => {
-    expect(() =>
+  it("accepts HTTPS proxy URLs for TLS-protected proxy transports", () => {
+    expect(
       SsrFProxyConfigSchema.parse({
         enabled: true,
         proxyUrl: "https://proxy.example.com:8443",
-      }),
-    ).toThrow(/http:\/\//i);
+      })?.proxyUrl,
+    ).toBe("https://proxy.example.com:8443");
   });
 
   it("does not expose Caddy-specific or unsupported upstream proxy keys", () => {
