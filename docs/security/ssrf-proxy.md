@@ -27,6 +27,8 @@ OpenClaw activates two routing layers:
 | A     | undici global dispatcher via proxy environment | `fetch()` and direct `undici.request()` calls                          |
 | B     | `global-agent` bootstrap                       | `node:http`, `node:https`, axios, got, node-fetch, and similar clients |
 
+The proxy URL itself must use `http://`. HTTPS destinations are still supported through the proxy with HTTP `CONNECT`; this only means OpenClaw expects a plain HTTP forward-proxy listener such as `http://127.0.0.1:3128`.
+
 While the proxy is active, OpenClaw clears `no_proxy`, `NO_PROXY`, and `GLOBAL_AGENT_NO_PROXY`. Those bypass lists are destination-based, so leaving `localhost` or `127.0.0.1` there would let the highest-risk SSRF targets skip the filtering proxy.
 
 On shutdown, OpenClaw restores the previous proxy environment and resets the cached undici and `global-agent` routing state.
@@ -68,6 +70,8 @@ Configure your proxy to:
 ## Recommended Blocked Destinations
 
 Use this denylist as the starting point for any Caddy, Squid, Envoy, firewall, or egress proxy policy.
+
+OpenClaw's application-level classifier lives in `src/infra/net/ssrf.ts` and `src/shared/net/ip.ts`. The relevant parity hooks are `BLOCKED_HOSTNAMES`, `BLOCKED_IPV4_SPECIAL_USE_RANGES`, `BLOCKED_IPV6_SPECIAL_USE_RANGES`, `RFC2544_BENCHMARK_PREFIX`, and the embedded IPv4 sentinel handling for NAT64, 6to4, Teredo, ISATAP, and IPv4-mapped forms. Those files are useful references when maintaining an external proxy policy, but OpenClaw does not automatically export or enforce those rules in your proxy.
 
 | Range or host                                                                        | Why to block                                         |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------- |
@@ -124,13 +128,36 @@ Example JSON shape:
                         "localhost.localdomain",
                         "metadata.google.internal",
                         "127.0.0.0/8",
+                        "0.0.0.0/8",
                         "10.0.0.0/8",
                         "172.16.0.0/12",
                         "192.168.0.0/16",
                         "169.254.0.0/16",
+                        "169.254.169.254",
+                        "100.64.0.0/10",
+                        "198.18.0.0/15",
+                        "192.0.0.0/24",
+                        "192.0.2.0/24",
+                        "198.51.100.0/24",
+                        "203.0.113.0/24",
+                        "224.0.0.0/4",
+                        "240.0.0.0/4",
                         "::1/128",
+                        "::/128",
+                        "fe80::/10",
                         "fc00::/7",
-                        "fe80::/10"
+                        "fec0::/10",
+                        "ff00::/8",
+                        "100::/64",
+                        "2001:2::/48",
+                        "2001:20::/28",
+                        "2001:db8::/32",
+                        "64:ff9b::/96",
+                        "64:ff9b:1::/48",
+                        "2002::/16",
+                        "2001::/32",
+                        "::/96",
+                        "::ffff:0:0/96"
                       ],
                       "allow": false
                     },

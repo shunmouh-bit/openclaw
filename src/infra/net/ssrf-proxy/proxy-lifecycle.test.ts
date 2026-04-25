@@ -82,7 +82,7 @@ describe("startSsrFProxy", () => {
     expect(handle).toBeNull();
     expect(process.env["http_proxy"]).toBeUndefined();
     expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining("enabled but no proxy URL is configured"),
+      expect.stringContaining("enabled but no HTTP proxy URL is configured"),
     );
   });
 
@@ -105,6 +105,16 @@ describe("startSsrFProxy", () => {
 
     expect(handle?.proxyUrl).toBe("http://127.0.0.1:3129");
     expect(process.env["HTTP_PROXY"]).toBe("http://127.0.0.1:3129");
+  });
+
+  it("rejects HTTPS proxy URLs from OPENCLAW_SSRF_PROXY_URL", async () => {
+    process.env["OPENCLAW_SSRF_PROXY_URL"] = "https://127.0.0.1:3128";
+
+    const handle = await startSsrFProxy({ enabled: true });
+
+    expect(handle).toBeNull();
+    expect(process.env["HTTP_PROXY"]).toBeUndefined();
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining("http:// forward proxy"));
   });
 
   it("sets both undici and global-agent proxy env vars", async () => {

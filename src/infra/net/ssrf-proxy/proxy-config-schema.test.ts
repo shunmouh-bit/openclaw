@@ -21,13 +21,13 @@ describe("SsrFProxyConfigSchema", () => {
     });
   });
 
-  it("accepts HTTP(S) proxyUrl values using URL parser semantics", () => {
-    expect(
+  it("rejects HTTPS proxy URLs because the node:http routing layer requires HTTP proxies", () => {
+    expect(() =>
       SsrFProxyConfigSchema.parse({
         enabled: true,
-        proxyUrl: "HTTPS://proxy.example.com:8443",
-      })?.proxyUrl,
-    ).toBe("HTTPS://proxy.example.com:8443");
+        proxyUrl: "https://proxy.example.com:8443",
+      }),
+    ).toThrow(/http:\/\//i);
   });
 
   it("does not expose Caddy-specific or unsupported upstream proxy keys", () => {
@@ -38,7 +38,7 @@ describe("SsrFProxyConfigSchema", () => {
     expect(keys).not.toContain("userProxy");
   });
 
-  it("rejects proxyUrl values without an HTTP(S) scheme", () => {
+  it("rejects proxyUrl values that are not HTTP forward proxies", () => {
     expect(() =>
       SsrFProxyConfigSchema.parse({ enabled: true, proxyUrl: "socks5://127.0.0.1" }),
     ).toThrow();

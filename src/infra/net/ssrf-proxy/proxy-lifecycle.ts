@@ -118,7 +118,7 @@ function bootstrapNodeHttpStack(proxyUrl: string): void {
 function isSupportedProxyUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return url.protocol === "http:";
   } catch {
     return false;
   }
@@ -143,8 +143,8 @@ export async function startSsrFProxy(
   const proxyUrl = resolveProxyUrl(config);
   if (proxyUrl === null) {
     logWarn(
-      "ssrf-proxy: enabled but no proxy URL is configured; set ssrfProxy.proxyUrl " +
-        "or OPENCLAW_SSRF_PROXY_URL. Using application-level SSRF guards only.",
+      "ssrf-proxy: enabled but no HTTP proxy URL is configured; set ssrfProxy.proxyUrl " +
+        "or OPENCLAW_SSRF_PROXY_URL to an http:// forward proxy. Using application-level SSRF guards only.",
     );
     return null;
   }

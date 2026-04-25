@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createServer, type Server } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import * as net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -34,9 +34,38 @@ async function closeServer(server: Server | null): Promise<void> {
 }
 
 function createTunnelProxy(seenConnectTargets: string[]): Server {
-  const proxy = createServer((_req, res) => {
-    res.writeHead(501, { "content-type": "text/plain" });
-    res.end("CONNECT required");
+  const proxy = createServer((req, res) => {
+    const target = req.url ?? "";
+    seenConnectTargets.push(target);
+
+    let targetUrl: URL;
+    try {
+      targetUrl = new URL(target);
+    } catch {
+      res.writeHead(400, { "content-type": "text/plain" });
+      res.end("absolute-form proxy URL required");
+      return;
+    }
+
+    const upstream = httpRequest(
+      {
+        hostname: targetUrl.hostname,
+        port: targetUrl.port,
+        path: `${targetUrl.pathname}${targetUrl.search}`,
+        method: req.method,
+        headers: { ...req.headers, host: targetUrl.host, connection: "close" },
+      },
+      (upstreamRes) => {
+        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+        upstreamRes.pipe(res);
+      },
+    );
+
+    upstream.on("error", () => {
+      res.writeHead(502, { "content-type": "text/plain" });
+      res.end("upstream error");
+    });
+    req.pipe(upstream);
   });
 
   proxy.on("connect", (req, clientSocket, head) => {
@@ -125,7 +154,7 @@ describe("SSRF external proxy routing", () => {
     target = null;
   });
 
-  it("routes fetch through an operator-managed proxy even when NO_PROXY includes loopback", async () => {
+  it("routes fetch and node:http through an operator-managed proxy even when NO_PROXY includes loopback", async () => {
     target = createServer((_req, res) => {
       res.writeHead(218, { "content-type": "text/plain" });
       res.end("from loopback target");
@@ -138,8 +167,28 @@ describe("SSRF external proxy routing", () => {
 
     const child = await runNodeModule(
       `
+        import http from "node:http";
         import { fetch as undiciFetch } from "undici";
         import { startSsrFProxy, stopSsrFProxy } from "./src/infra/net/ssrf-proxy/proxy-lifecycle.ts";
+
+        async function nodeHttpGet(url) {
+          return new Promise((resolve, reject) => {
+            const req = http.get(url, (response) => {
+              let body = "";
+              response.setEncoding("utf8");
+              response.on("data", (chunk) => {
+                body += chunk;
+              });
+              response.on("end", () => {
+                resolve({ status: response.statusCode, body });
+              });
+            });
+            req.setTimeout(5000, () => {
+              req.destroy(new Error("node:http request timed out"));
+            });
+            req.on("error", reject);
+          });
+        }
 
         const handle = await startSsrFProxy({ enabled: true });
         if (handle === null) {
@@ -150,7 +199,8 @@ describe("SSRF external proxy routing", () => {
             signal: AbortSignal.timeout(5000),
           });
           const body = await response.text();
-          console.log(JSON.stringify({ status: response.status, body }));
+          const nodeHttp = await nodeHttpGet(process.env.OPENCLAW_TEST_NODE_HTTP_TARGET_URL);
+          console.log(JSON.stringify({ fetch: { status: response.status, body }, nodeHttp }));
         } finally {
           await stopSsrFProxy(handle);
         }
@@ -159,6 +209,7 @@ describe("SSRF external proxy routing", () => {
         ...process.env,
         OPENCLAW_SSRF_PROXY_URL: `http://127.0.0.1:${proxyPort}`,
         OPENCLAW_TEST_TARGET_URL: `http://127.0.0.1:${targetPort}/private-metadata`,
+        OPENCLAW_TEST_NODE_HTTP_TARGET_URL: `http://127.0.0.1:${targetPort}/node-http-metadata`,
         NO_PROXY: "127.0.0.1,localhost",
         no_proxy: "localhost",
         GLOBAL_AGENT_NO_PROXY: "localhost",
@@ -167,8 +218,10 @@ describe("SSRF external proxy routing", () => {
 
     expect(child.stderr).toBe("");
     expect(child.code).toBe(0);
-    expect(child.stdout).toContain('"status":218');
+    expect(child.stdout).toContain('"fetch":{"status":218');
+    expect(child.stdout).toContain('"nodeHttp":{"status":218');
     expect(child.stdout).toContain('"body":"from loopback target"');
     expect(seenConnectTargets).toContain(`127.0.0.1:${targetPort}`);
+    expect(seenConnectTargets).toContain(`http://127.0.0.1:${targetPort}/node-http-metadata`);
   });
 });
