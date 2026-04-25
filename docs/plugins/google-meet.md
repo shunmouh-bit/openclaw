@@ -119,6 +119,10 @@ openclaw googlemeet create --no-join
   the OpenClaw Chrome profile on the node to already be signed in to Google.
   Browser automation handles Meet's own first-run microphone prompt; that prompt
   is not treated as a Google login failure.
+  Join and create flows also try to reuse an existing Meet tab before opening a
+  new one. Matching ignores harmless URL query strings such as `authuser`, so an
+  agent retry should focus the already-open meeting instead of creating a second
+  Chrome tab.
 
 The command/tool output includes a `source` field (`api` or `browser`) so agents
 can explain which path was used. `create` joins the new meeting by default and
@@ -140,6 +144,14 @@ then share the returned `meetingUri`.
 For an observe-only/browser-control join, set `"mode": "transcribe"`. That does
 not start the duplex realtime model bridge, so it will not talk back into the
 meeting.
+
+During realtime sessions, `google_meet` status includes browser and audio bridge
+health such as `inCall`, `manualActionRequired`, `providerConnected`,
+`realtimeReady`, `audioInputActive`, `audioOutputActive`, last input/output
+timestamps, byte counters, and bridge closed state. If a safe Meet page prompt
+appears, browser automation handles it when it can. Login, host admission, and
+browser/OS permission prompts are reported as manual action with a reason and
+message for the agent to relay.
 
 Chrome joins as the signed-in Chrome profile. In Meet, pick `BlackHole 2ch` for
 the microphone/speaker path used by OpenClaw. For clean duplex audio, use
@@ -728,10 +740,28 @@ openclaw googlemeet test-speech https://meet.google.com/abc-defg-hij \
 Expected Chrome-node state:
 
 - `googlemeet setup` is all green.
+- `googlemeet setup` includes `chrome-node-connected` when Chrome-node is the
+  default transport or a node is pinned.
 - `nodes status` shows the selected node connected.
 - The selected node advertises both `googlemeet.chrome` and `browser.proxy`.
 - The Meet tab joins the call and `test-speech` returns Chrome health with
   `inCall: true`.
+
+For a remote Chrome host such as a Parallels macOS VM, this is the shortest
+safe check after updating the Gateway or the VM:
+
+```bash
+openclaw googlemeet setup
+openclaw nodes status --connected
+openclaw nodes invoke \
+  --node parallels-macos \
+  --command googlemeet.chrome \
+  --params '{"action":"setup"}'
+```
+
+That proves the Gateway plugin is loaded, the VM node is connected with the
+current token, and the Meet audio bridge is available before an agent opens a
+real meeting tab.
 
 For a Twilio smoke, use a meeting that exposes phone dial-in details:
 
@@ -796,6 +826,26 @@ The Gateway config must allow those node commands:
     },
   },
 }
+```
+
+If `googlemeet setup` fails `chrome-node-connected` or the Gateway log reports
+`gateway token mismatch`, reinstall or restart the node with the current Gateway
+token. For a LAN Gateway this usually means:
+
+```bash
+OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 \
+  openclaw node install \
+  --host <gateway-lan-ip> \
+  --port 18789 \
+  --display-name parallels-macos \
+  --force
+```
+
+Then reload the node service and re-run:
+
+```bash
+openclaw googlemeet setup
+openclaw nodes status --connected
 ```
 
 ### Browser opens but agent cannot join

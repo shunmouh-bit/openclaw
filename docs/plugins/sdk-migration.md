@@ -262,7 +262,7 @@ releases.
   | `plugin-sdk/inbound-reply-dispatch` | Inbound reply helpers | Shared record-and-dispatch helpers |
   | `plugin-sdk/messaging-targets` | Messaging target parsing | Target parsing/matching helpers |
   | `plugin-sdk/outbound-media` | Outbound media helpers | Shared outbound media loading |
-  | `plugin-sdk/outbound-runtime` | Outbound runtime helpers | Outbound identity/send delegate and payload planning helpers |
+  | `plugin-sdk/outbound-runtime` | Outbound runtime helpers | Outbound delivery, identity/send delegate, session, formatting, and payload planning helpers |
   | `plugin-sdk/thread-bindings-runtime` | Thread-binding helpers | Thread-binding lifecycle and adapter helpers |
   | `plugin-sdk/agent-media-payload` | Legacy media payload helpers | Agent media payload builder for legacy field layouts |
   | `plugin-sdk/channel-runtime` | Deprecated compatibility shim | Legacy channel runtime utilities only |
@@ -278,7 +278,7 @@ releases.
   | `plugin-sdk/gateway-runtime` | Gateway helpers | Gateway client and channel-status patch helpers |
   | `plugin-sdk/config-runtime` | Config helpers | Config load/write helpers |
   | `plugin-sdk/telegram-command-config` | Telegram command helpers | Fallback-stable Telegram command validation helpers when the bundled Telegram contract surface is unavailable |
-  | `plugin-sdk/approval-runtime` | Approval prompt helpers | Exec/plugin approval payload, approval capability/profile helpers, native approval routing/runtime helpers |
+  | `plugin-sdk/approval-runtime` | Approval prompt helpers | Exec/plugin approval payload, approval capability/profile helpers, native approval routing/runtime helpers, and structured approval display path formatting |
   | `plugin-sdk/approval-auth-runtime` | Approval auth helpers | Approver resolution, same-chat action auth |
   | `plugin-sdk/approval-client-runtime` | Approval client helpers | Native exec approval profile/filter helpers |
   | `plugin-sdk/approval-delivery-runtime` | Approval delivery helpers | Native approval capability/delivery adapters |
