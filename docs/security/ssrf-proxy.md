@@ -25,13 +25,13 @@ OpenClaw activates two routing layers:
 | Layer | Mechanism                                      | Covers                                                                 |
 | ----- | ---------------------------------------------- | ---------------------------------------------------------------------- |
 | A     | undici global dispatcher via proxy environment | `fetch()` and direct `undici.request()` calls                          |
-| B     | `proxy-agent` backed Node core request shim    | `node:http`, `node:https`, axios, got, node-fetch, and similar clients |
+| B     | `global-agent` bootstrap                       | `node:http`, `node:https`, axios, got, node-fetch, and similar clients |
 
-The proxy URL may use `http://` or `https://`. HTTPS destinations are supported through either proxy transport with HTTP `CONNECT`. Use `https://` for the proxy URL when the OpenClaw-to-proxy hop crosses a network boundary where proxy credentials or destination hostnames should not be visible in cleartext.
+The proxy URL itself must use `http://`. HTTPS destinations are still supported through the proxy with HTTP `CONNECT`; this only means OpenClaw expects a plain HTTP forward-proxy listener such as `http://127.0.0.1:3128`.
 
-While the proxy is active, OpenClaw clears `no_proxy` and `NO_PROXY`. Those bypass lists are destination-based, so leaving `localhost` or `127.0.0.1` there would let the highest-risk SSRF targets skip the filtering proxy.
+While the proxy is active, OpenClaw clears `no_proxy`, `NO_PROXY`, and `GLOBAL_AGENT_NO_PROXY`. Those bypass lists are destination-based, so leaving `localhost` or `127.0.0.1` there would let the highest-risk SSRF targets skip the filtering proxy.
 
-On shutdown, OpenClaw restores the previous proxy environment and resets the cached undici and Node core HTTP routing state.
+On shutdown, OpenClaw restores the previous proxy environment and resets the cached undici and `global-agent` routing state.
 
 ## Configuration
 
@@ -245,6 +245,5 @@ ssrfProxy:
 
 - This feature improves coverage for raw process-local HTTP clients, but it does not replace application-level `fetchWithSsrFGuard`.
 - Child processes and native addons may not honor Node-level proxy routing unless they inherit and respect proxy environment variables.
-- For a hard egress guarantee, pair this with host, container, VM, or network policy that prevents OpenClaw from reaching the public internet except through the filtering proxy.
 - OpenClaw does not inspect, test, or certify your proxy policy.
 - Treat changes to proxy ACLs as security-sensitive configuration changes.

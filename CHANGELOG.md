@@ -7,7 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Changes
 
 - Matrix: require full cross-signing identity trust for self-device verification and add `openclaw matrix verify self` so operators can establish that trust from the CLI. (#70401) Thanks @gumadeiras.
-- Security/SSRF: add opt-in network-level SSRF protection via an operator-managed HTTP(S) forward proxy configured with `ssrfProxy.proxyUrl`, so deployments can route OpenClaw's process-local HTTP clients through their own Caddy, Squid, Envoy, or equivalent filtering proxy while keeping application-level guards active. (#70044) Thanks @jesse-merhi.
+- Security/SSRF: add opt-in network-level SSRF protection via an operator-managed HTTP forward proxy configured with `ssrfProxy.proxyUrl`, so deployments can route OpenClaw's process-local HTTP clients through their own Caddy, Squid, Envoy, or equivalent filtering proxy while keeping application-level guards active. (#70044) Thanks @jesse-merhi.
 
 ### Fixes
 

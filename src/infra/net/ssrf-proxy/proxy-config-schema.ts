@@ -4,10 +4,10 @@
 
 import { z } from "zod";
 
-function isHttpOrHttpsProxyUrl(value: string): boolean {
+function isHttpProxyUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return url.protocol === "http:";
   } catch {
     return false;
   }
@@ -26,16 +26,17 @@ export const SsrFProxyConfigSchema = z
     enabled: z.boolean().optional(),
 
     /**
-     * HTTP(S) forward proxy URL to inject into HTTP client proxy environment variables.
+     * HTTP forward proxy URL to inject into HTTP client proxy environment variables.
      * The proxy itself is operator-managed and must enforce SSRF filtering.
+     * HTTPS destinations still work through the HTTP proxy via CONNECT.
      *
      * Example: "http://127.0.0.1:3128"
      */
     proxyUrl: z
       .string()
       .url()
-      .refine(isHttpOrHttpsProxyUrl, {
-        message: "proxyUrl must use http:// or https://",
+      .refine(isHttpProxyUrl, {
+        message: "proxyUrl must use http://",
       })
       .optional(),
   })

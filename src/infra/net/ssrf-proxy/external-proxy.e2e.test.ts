@@ -171,9 +171,9 @@ describe("SSRF external proxy routing", () => {
         import { fetch as undiciFetch } from "undici";
         import { startSsrFProxy, stopSsrFProxy } from "./src/infra/net/ssrf-proxy/proxy-lifecycle.ts";
 
-        async function nodeHttpGet(url, opts = {}) {
+        async function nodeHttpGet(url) {
           return new Promise((resolve, reject) => {
-            const req = http.get(url, opts, (response) => {
+            const req = http.get(url, (response) => {
               let body = "";
               response.setEncoding("utf8");
               response.on("data", (chunk) => {
@@ -200,11 +200,7 @@ describe("SSRF external proxy routing", () => {
           });
           const body = await response.text();
           const nodeHttp = await nodeHttpGet(process.env.OPENCLAW_TEST_NODE_HTTP_TARGET_URL);
-          const explicitAgent = await nodeHttpGet(
-            process.env.OPENCLAW_TEST_EXPLICIT_AGENT_TARGET_URL,
-            { agent: new http.Agent() },
-          );
-          console.log(JSON.stringify({ fetch: { status: response.status, body }, nodeHttp, explicitAgent }));
+          console.log(JSON.stringify({ fetch: { status: response.status, body }, nodeHttp }));
         } finally {
           await stopSsrFProxy(handle);
         }
@@ -214,9 +210,9 @@ describe("SSRF external proxy routing", () => {
         OPENCLAW_SSRF_PROXY_URL: `http://127.0.0.1:${proxyPort}`,
         OPENCLAW_TEST_TARGET_URL: `http://127.0.0.1:${targetPort}/private-metadata`,
         OPENCLAW_TEST_NODE_HTTP_TARGET_URL: `http://127.0.0.1:${targetPort}/node-http-metadata`,
-        OPENCLAW_TEST_EXPLICIT_AGENT_TARGET_URL: `http://127.0.0.1:${targetPort}/node-http-explicit-agent`,
         NO_PROXY: "127.0.0.1,localhost",
         no_proxy: "localhost",
+        GLOBAL_AGENT_NO_PROXY: "localhost",
       },
     );
 
@@ -224,10 +220,8 @@ describe("SSRF external proxy routing", () => {
     expect(child.code).toBe(0);
     expect(child.stdout).toContain('"fetch":{"status":218');
     expect(child.stdout).toContain('"nodeHttp":{"status":218');
-    expect(child.stdout).toContain('"explicitAgent":{"status":218');
     expect(child.stdout).toContain('"body":"from loopback target"');
     expect(seenConnectTargets).toContain(`127.0.0.1:${targetPort}`);
     expect(seenConnectTargets).toContain(`http://127.0.0.1:${targetPort}/node-http-metadata`);
-    expect(seenConnectTargets).toContain(`http://127.0.0.1:${targetPort}/node-http-explicit-agent`);
   });
 });

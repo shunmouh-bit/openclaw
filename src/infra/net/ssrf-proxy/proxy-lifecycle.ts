@@ -7,22 +7,10 @@
  * restores the previous process state on shutdown.
  */
 
-import http from "node:http";
-import https from "node:https";
-import { ProxyAgent } from "proxy-agent";
+import { bootstrap as bootstrapGlobalAgent } from "global-agent";
 import { logInfo, logWarn } from "../../../logger.js";
 import { forceResetGlobalDispatcher } from "../undici-global-dispatcher.js";
 import type { SsrFProxyConfig } from "./proxy-config-schema.js";
-
-type ClientRequestFunction = typeof http.request;
-type ClientRequestCallback = (res: http.IncomingMessage) => void;
-type ClientRequestArg = string | URL | http.RequestOptions;
-type ClientRequestRestArg = http.RequestOptions | ClientRequestCallback | undefined;
-type HttpClientModule = {
-  globalAgent: http.Agent;
-  request: ClientRequestFunction;
-  get: ClientRequestFunction;
-};
 
 export type SsrFProxyHandle = {
   /** The operator-managed proxy URL injected into process.env. */
@@ -38,20 +26,23 @@ export type SsrFProxyHandle = {
 };
 
 const PROXY_ENV_KEYS = ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] as const;
-const NO_PROXY_ENV_KEYS = ["no_proxy", "NO_PROXY"] as const;
-const ALL_PROXY_ENV_KEYS = [...PROXY_ENV_KEYS, ...NO_PROXY_ENV_KEYS] as const;
+const GLOBAL_AGENT_PROXY_KEYS = ["GLOBAL_AGENT_HTTP_PROXY", "GLOBAL_AGENT_HTTPS_PROXY"] as const;
+const GLOBAL_AGENT_FORCE_KEYS = ["GLOBAL_AGENT_FORCE_GLOBAL_AGENT"] as const;
+const NO_PROXY_ENV_KEYS = ["no_proxy", "NO_PROXY", "GLOBAL_AGENT_NO_PROXY"] as const;
+const ALL_PROXY_ENV_KEYS = [
+  ...PROXY_ENV_KEYS,
+  ...GLOBAL_AGENT_PROXY_KEYS,
+  ...GLOBAL_AGENT_FORCE_KEYS,
+  ...NO_PROXY_ENV_KEYS,
+] as const;
 type ProxyEnvKey = (typeof ALL_PROXY_ENV_KEYS)[number];
 type ProxyEnvSnapshot = Record<ProxyEnvKey, string | undefined>;
 
-type NodeHttpAgentSnapshot = {
-  httpGlobalAgent: typeof http.globalAgent;
-  httpsGlobalAgent: typeof https.globalAgent;
-  httpRequest: typeof http.request;
-  httpGet: typeof http.get;
-  httpsRequest: typeof https.request;
-  httpsGet: typeof https.get;
-  proxyAgent: ProxyAgent;
-};
+let globalAgentBootstrapped = false;
+
+export function _resetGlobalAgentBootstrapForTests(): void {
+  globalAgentBootstrapped = false;
+}
 
 function captureProxyEnv(): ProxyEnvSnapshot {
   return {
@@ -59,8 +50,12 @@ function captureProxyEnv(): ProxyEnvSnapshot {
     https_proxy: process.env["https_proxy"],
     HTTP_PROXY: process.env["HTTP_PROXY"],
     HTTPS_PROXY: process.env["HTTPS_PROXY"],
+    GLOBAL_AGENT_HTTP_PROXY: process.env["GLOBAL_AGENT_HTTP_PROXY"],
+    GLOBAL_AGENT_HTTPS_PROXY: process.env["GLOBAL_AGENT_HTTPS_PROXY"],
+    GLOBAL_AGENT_FORCE_GLOBAL_AGENT: process.env["GLOBAL_AGENT_FORCE_GLOBAL_AGENT"],
     no_proxy: process.env["no_proxy"],
     NO_PROXY: process.env["NO_PROXY"],
+    GLOBAL_AGENT_NO_PROXY: process.env["GLOBAL_AGENT_NO_PROXY"],
   };
 }
 
@@ -69,6 +64,10 @@ function injectProxyEnv(proxyUrl: string): ProxyEnvSnapshot {
   for (const key of PROXY_ENV_KEYS) {
     process.env[key] = proxyUrl;
   }
+  for (const key of GLOBAL_AGENT_PROXY_KEYS) {
+    process.env[key] = proxyUrl;
+  }
+  process.env["GLOBAL_AGENT_FORCE_GLOBAL_AGENT"] = "true";
   for (const key of NO_PROXY_ENV_KEYS) {
     process.env[key] = "";
   }
@@ -86,103 +85,40 @@ function restoreProxyEnv(snapshot: ProxyEnvSnapshot): void {
   }
 }
 
-function isRequestOptions(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !(value instanceof URL);
-}
-
-function withForcedProxyAgent(args: readonly unknown[], proxyAgent: ProxyAgent): unknown[] {
-  const next = [...args];
-  if (next.length === 0) {
-    return [{ agent: proxyAgent }];
-  }
-
-  const first = next[0];
-  if (typeof first === "string" || first instanceof URL) {
-    const second = next[1];
-    if (typeof second === "function" || second === undefined) {
-      next.splice(1, 0, { agent: proxyAgent });
-      return next;
-    }
-    if (isRequestOptions(second)) {
-      next[1] = { ...second, agent: proxyAgent };
-    }
-    return next;
-  }
-
-  if (isRequestOptions(first)) {
-    next[0] = { ...first, agent: proxyAgent };
-  }
-  return next;
-}
-
-function patchClientRequest(
-  module: HttpClientModule,
-  original: ClientRequestFunction,
-  proxyAgent: ProxyAgent,
-): ClientRequestFunction {
-  function patchedClientRequest(
-    options: ClientRequestArg,
-    callback?: ClientRequestCallback,
-  ): http.ClientRequest;
-  function patchedClientRequest(
-    url: string | URL,
-    options: http.RequestOptions,
-    callback?: ClientRequestCallback,
-  ): http.ClientRequest;
-  function patchedClientRequest(
-    optionsOrUrl: ClientRequestArg,
-    ...rest: ClientRequestRestArg[]
-  ): http.ClientRequest {
-    const args: unknown[] = [optionsOrUrl, ...rest];
-    return Reflect.apply(
-      original,
-      module,
-      withForcedProxyAgent(args, proxyAgent),
-    ) as http.ClientRequest;
-  }
-  return patchedClientRequest;
-}
-
-function installNodeHttpProxyAgent(): NodeHttpAgentSnapshot {
-  const httpClient = http as unknown as HttpClientModule;
-  const httpsClient = https as unknown as HttpClientModule;
-  const snapshot: NodeHttpAgentSnapshot = {
-    httpGlobalAgent: http.globalAgent,
-    httpsGlobalAgent: https.globalAgent,
-    httpRequest: http.request,
-    httpGet: http.get,
-    httpsRequest: https.request,
-    httpsGet: https.get,
-    proxyAgent: new ProxyAgent(),
-  };
-  httpClient.globalAgent = snapshot.proxyAgent;
-  httpsClient.globalAgent = snapshot.proxyAgent;
-  httpClient.request = patchClientRequest(httpClient, snapshot.httpRequest, snapshot.proxyAgent);
-  httpClient.get = patchClientRequest(httpClient, snapshot.httpGet, snapshot.proxyAgent);
-  httpsClient.request = patchClientRequest(httpsClient, snapshot.httpsRequest, snapshot.proxyAgent);
-  httpsClient.get = patchClientRequest(httpsClient, snapshot.httpsGet, snapshot.proxyAgent);
-  return snapshot;
-}
-
-function restoreNodeHttpProxyAgent(snapshot: NodeHttpAgentSnapshot | null): void {
-  if (snapshot === null) {
+function restoreGlobalAgentRuntime(snapshot: ProxyEnvSnapshot): void {
+  if (
+    typeof global === "undefined" ||
+    (global as Record<string, unknown>)["GLOBAL_AGENT"] == null
+  ) {
     return;
   }
-  const httpClient = http as unknown as HttpClientModule;
-  const httpsClient = https as unknown as HttpClientModule;
-  httpClient.globalAgent = snapshot.httpGlobalAgent;
-  httpClient.request = snapshot.httpRequest;
-  httpClient.get = snapshot.httpGet;
-  httpsClient.globalAgent = snapshot.httpsGlobalAgent;
-  httpsClient.request = snapshot.httpsRequest;
-  httpsClient.get = snapshot.httpsGet;
-  snapshot.proxyAgent.destroy();
+  const agent = (global as Record<string, unknown>)["GLOBAL_AGENT"] as Record<string, unknown>;
+  agent["HTTP_PROXY"] = snapshot["GLOBAL_AGENT_HTTP_PROXY"] ?? "";
+  agent["HTTPS_PROXY"] = snapshot["GLOBAL_AGENT_HTTPS_PROXY"] ?? "";
+  agent["NO_PROXY"] = snapshot["GLOBAL_AGENT_NO_PROXY"] ?? null;
+}
+
+function bootstrapNodeHttpStack(proxyUrl: string): void {
+  if (!globalAgentBootstrapped) {
+    bootstrapGlobalAgent();
+    globalAgentBootstrapped = true;
+  }
+
+  if (
+    typeof global !== "undefined" &&
+    (global as Record<string, unknown>)["GLOBAL_AGENT"] != null
+  ) {
+    const agent = (global as Record<string, unknown>)["GLOBAL_AGENT"] as Record<string, unknown>;
+    agent["HTTP_PROXY"] = proxyUrl;
+    agent["HTTPS_PROXY"] = proxyUrl;
+    agent["NO_PROXY"] = process.env["GLOBAL_AGENT_NO_PROXY"];
+  }
 }
 
 function isSupportedProxyUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return url.protocol === "http:";
   } catch {
     return false;
   }
@@ -207,18 +143,16 @@ export async function startSsrFProxy(
   const proxyUrl = resolveProxyUrl(config);
   if (proxyUrl === null) {
     logWarn(
-      "ssrf-proxy: enabled but no HTTP(S) proxy URL is configured; set ssrfProxy.proxyUrl " +
-        "or OPENCLAW_SSRF_PROXY_URL to an http:// or https:// forward proxy. Using application-level SSRF guards only.",
+      "ssrf-proxy: enabled but no HTTP proxy URL is configured; set ssrfProxy.proxyUrl " +
+        "or OPENCLAW_SSRF_PROXY_URL to an http:// forward proxy. Using application-level SSRF guards only.",
     );
     return null;
   }
 
+  const startupEnvSnapshot = captureProxyEnv();
   let injectedEnvSnapshot: ProxyEnvSnapshot | null = null;
-  let nodeHttpAgentSnapshot: NodeHttpAgentSnapshot | null = null;
 
   const restoreRuntime = (): void => {
-    restoreNodeHttpProxyAgent(nodeHttpAgentSnapshot);
-    nodeHttpAgentSnapshot = null;
     if (injectedEnvSnapshot !== null) {
       restoreProxyEnv(injectedEnvSnapshot);
       injectedEnvSnapshot = null;
@@ -228,12 +162,17 @@ export async function startSsrFProxy(
     } catch (err) {
       logWarn(`ssrf-proxy: failed to reset undici dispatcher: ${String(err)}`);
     }
+    try {
+      restoreGlobalAgentRuntime(startupEnvSnapshot);
+    } catch (err) {
+      logWarn(`ssrf-proxy: failed to reset global-agent: ${String(err)}`);
+    }
   };
 
   try {
     injectedEnvSnapshot = injectProxyEnv(proxyUrl);
     forceResetGlobalDispatcher();
-    nodeHttpAgentSnapshot = installNodeHttpProxyAgent();
+    bootstrapNodeHttpStack(proxyUrl);
   } catch (err) {
     restoreRuntime();
     logWarn(
