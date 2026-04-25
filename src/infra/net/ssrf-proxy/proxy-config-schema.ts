@@ -4,10 +4,20 @@
 
 import { z } from "zod";
 
+function isHttpProxyUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export const SsrFProxyConfigSchema = z
   .object({
     /**
-     * Whether to enable the Caddy-based network-level SSRF proxy.
+     * Whether to route process-wide HTTP traffic through an operator-managed
+     * SSRF-filtering forward proxy.
      * Default: false (disabled).
      *
      * Set to true to enable the proxy. When disabled, OpenClaw relies on
@@ -16,38 +26,18 @@ export const SsrFProxyConfigSchema = z
     enabled: z.boolean().optional(),
 
     /**
-     * Explicit path to the caddy binary.
-     * Default: resolves 'caddy' from PATH, or the OPENCLAW_CADDY_BINARY env var.
+     * Forward proxy URL to inject into HTTP client proxy environment variables.
+     * The proxy itself is operator-managed and must enforce SSRF filtering.
      *
-     * Example: "/usr/local/bin/caddy"
+     * Example: "http://127.0.0.1:3128"
      */
-    binaryPath: z.string().optional(),
-
-    /**
-     * Additional CIDR ranges to block at the network level, on top of the
-     * built-in defaults (RFC-1918, loopback, link-local, CGNAT, etc.).
-     *
-     * Example: ["203.0.113.0/24"]
-     */
-    extraBlockedCidrs: z.array(z.string()).optional(),
-
-    /**
-     * Hostnames that should be allowed through even if they resolve to
-     * addresses in a normally-blocked range (e.g. internal corporate services).
-     *
-     * These are inserted as explicit ALLOW rules before all DENY rules in the
-     * Caddy ACL, so they take precedence.
-     *
-     * Example: ["internal-api.corp.example.com"]
-     */
-    extraAllowedHosts: z.array(z.string()).optional(),
-
-    /**
-     * Reserved for a future upstream-proxy design. Caddy forwardproxy upstream
-     * mode is incompatible with ACL enforcement, so accepting it here would
-     * silently weaken the sidecar's SSRF guarantee.
-     */
-    userProxy: z.never().optional(),
+    proxyUrl: z
+      .string()
+      .url()
+      .refine(isHttpProxyUrl, {
+        message: "proxyUrl must use http:// or https://",
+      })
+      .optional(),
   })
   .strict()
   .optional();

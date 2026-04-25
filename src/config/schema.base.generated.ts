@@ -23049,23 +23049,9 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
           enabled: {
             type: "boolean",
           },
-          binaryPath: {
+          proxyUrl: {
             type: "string",
-          },
-          extraBlockedCidrs: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          extraAllowedHosts: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          userProxy: {
-            not: {},
+            format: "uri",
           },
         },
         additionalProperties: false,

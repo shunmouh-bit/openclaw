@@ -195,11 +195,11 @@ export async function runCli(argv: string[] = process.argv) {
   // Enforce the minimum supported runtime before doing any work.
   assertSupportedRuntime();
 
-  // Activate the network-level SSRF proxy if configured. This is best-effort:
+  // Activate external network-level SSRF proxy routing if configured. This is best-effort:
   //   - If config can't be loaded yet (e.g. fast-path commands), it's skipped.
-  //   - If ssrfProxy is disabled or Caddy is missing, it logs a warning and
+  //   - If ssrfProxy is disabled or no proxy URL is configured, it logs a warning and
   //     openclaw continues with application-level guards only.
-  // The handle is captured so we can shut Caddy down on exit.
+  // The handle is captured so we can restore process proxy state on exit.
   let ssrfProxyHandle: SsrFProxyHandle | null = null;
   const stopStartedSsrFProxy = async () => {
     const handle = ssrfProxyHandle;
@@ -222,7 +222,7 @@ export async function runCli(argv: string[] = process.argv) {
     // help, version). Don't block startup — application-level guards remain.
     ssrfProxyHandle = null;
   }
-  // Graceful shutdown — stop Caddy when openclaw exits via any signal.
+  // Graceful shutdown - restore proxy routing when openclaw exits via any signal.
   let onSigterm: (() => void) | null = null;
   let onSigint: (() => void) | null = null;
   let onExit: (() => void) | null = null;

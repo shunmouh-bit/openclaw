@@ -26,7 +26,7 @@ FROM e2e-runner AS deps
 COPY --chown=appuser:appuser package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY --chown=appuser:appuser ui/package.json ./ui/package.json
 COPY --chown=appuser:appuser patches ./patches
-COPY --chown=appuser:appuser scripts/postinstall-bundled-plugins.mjs scripts/postinstall-ssrf-caddy.mjs scripts/caddy-ssrf-version.txt scripts/preinstall-package-manager-warning.mjs scripts/npm-runner.mjs scripts/windows-cmd-helpers.mjs ./scripts/
+COPY --chown=appuser:appuser scripts/postinstall-bundled-plugins.mjs scripts/preinstall-package-manager-warning.mjs scripts/npm-runner.mjs scripts/windows-cmd-helpers.mjs ./scripts/
 RUN --mount=type=bind,source=extensions,target=/tmp/extensions,readonly \
     find /tmp/extensions -mindepth 2 -maxdepth 2 -name package.json -print | \
     while IFS= read -r manifest; do \

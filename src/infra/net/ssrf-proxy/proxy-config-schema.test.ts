@@ -13,20 +13,36 @@ describe("SsrFProxyConfigSchema", () => {
   it("accepts a full valid config", () => {
     const result = SsrFProxyConfigSchema.parse({
       enabled: true,
-      binaryPath: "/usr/local/bin/caddy",
-      extraBlockedCidrs: ["203.0.113.0/24"],
-      extraAllowedHosts: ["internal.corp.example.com"],
+      proxyUrl: "http://127.0.0.1:3128",
     });
     expect(result).toMatchObject({
       enabled: true,
-      binaryPath: "/usr/local/bin/caddy",
+      proxyUrl: "http://127.0.0.1:3128",
     });
   });
 
-  it("rejects userProxy because upstream chaining cannot preserve Caddy ACL enforcement", () => {
+  it("accepts HTTP(S) proxyUrl values using URL parser semantics", () => {
+    expect(
+      SsrFProxyConfigSchema.parse({
+        enabled: true,
+        proxyUrl: "HTTPS://proxy.example.com:8443",
+      })?.proxyUrl,
+    ).toBe("HTTPS://proxy.example.com:8443");
+  });
+
+  it("does not expose Caddy-specific or unsupported upstream proxy keys", () => {
+    const keys = SsrFProxyConfigSchema.unwrap().keyof().options;
+    expect(keys).not.toContain("binaryPath");
+    expect(keys).not.toContain("extraBlockedCidrs");
+    expect(keys).not.toContain("extraAllowedHosts");
+    expect(keys).not.toContain("userProxy");
+  });
+
+  it("rejects proxyUrl values without an HTTP(S) scheme", () => {
     expect(() =>
-      SsrFProxyConfigSchema.parse({ userProxy: "http://proxy.corp.example.com:8080" }),
+      SsrFProxyConfigSchema.parse({ enabled: true, proxyUrl: "socks5://127.0.0.1" }),
     ).toThrow();
+    expect(() => SsrFProxyConfigSchema.parse({ enabled: true, proxyUrl: "not-a-url" })).toThrow();
   });
 
   it("rejects unknown keys (strict)", () => {
