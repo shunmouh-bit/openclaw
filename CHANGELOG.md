@@ -21,6 +21,7 @@ Docs: https://docs.openclaw.ai
 - Plugins/setup: include `setup.providers[].envVars` in generic provider auth/env lookups and warn non-bundled plugins that still rely on deprecated `providerAuthEnvVars` compatibility metadata. Thanks @vincentkoc.
 - Plugins/setup: derive generic provider setup choices from descriptor-safe `setup.providers[].authMethods` before falling back to setup runtime. Thanks @vincentkoc.
 - Plugins/setup: surface manifest provider auth choices directly in provider setup flow before falling back to setup runtime or install-catalog choices. Thanks @vincentkoc.
+- Models/catalog: add a manifest catalog planner that produces stable manifest-sourced model rows and reports duplicate provider/model conflicts without loading provider runtime. (#71368) Thanks @shakkernerd.
 - Models/catalog: centralize manifest model catalog normalization behind a shared `src/model-catalog` contract so future provider index, cache, onboarding, and listing consumers reuse the same validation and row refs. (#71360) Thanks @shakkernerd.
 - Plugins/manifest: add a `modelCatalog` contract for provider-owned model rows, aliases, suppression rules, and discovery mode metadata without loading plugin runtime. (#71342) Thanks @shakkernerd.
 - Plugins/setup: warn when descriptor-only setup plugins still ship ignored setup runtime entries, keeping `setup.requiresRuntime: false` semantics explicit without breaking existing metadata. Thanks @vincentkoc.
@@ -64,13 +65,39 @@ Docs: https://docs.openclaw.ai
 - Plugins/Google Meet: let realtime Meet sessions consult the full OpenClaw agent for deeper answers while staying in the live voice loop. Thanks @steipete.
 - Gateway/VoiceClaw: add a realtime brain WebSocket endpoint backed by Gemini Live, with owner-auth gating and async OpenClaw tool handoff. (#70938) Thanks @yagudaev.
 - Providers/DeepSeek: add DeepSeek V4 Flash and V4 Pro to the bundled catalog and make V4 Flash the onboarding default. Thanks @lsdsjy.
+- CLI/Gateway: make `gateway status` start faster by skipping plugin loading on the read-only status path. (#71364) Thanks @andyylin.
 
 ### Fixes
 
+- Reply media: allow sandboxed replies to deliver OpenClaw-managed `media/outbound` and `media/tool-*` attachments without treating them as sandbox escapes, while keeping alias-escape checks on the managed media root. Fixes #71138. Thanks @mayor686, @truffle-dev, and @neeravmakwana.
+- CLI/agent: keep `openclaw agent --json` stdout reserved for the JSON response by routing gateway, plugin, and embedded-fallback diagnostics to stderr before execution starts. Fixes #71319.
+- Agents/Gemini: retry reasoning-only, empty, and planning-only Gemini turns instead of letting sessions silently stall. Fixes #71074. (#71362) Thanks @neeravmakwana.
+- Providers/DeepSeek: add missing `reasoning_content` placeholders for replayed assistant tool-call turns when DeepSeek V4 thinking is enabled, so switching an existing session to `deepseek-v4-flash` or `deepseek-v4-pro` no longer trips the provider's 400 replay check. Fixes #71372. Thanks @yangyang1719.
+- Exec approvals: allow bare command-name allowlist patterns to match PATH-resolved executable basenames without trusting `./tool` or absolute path-selected binaries. Fixes #71315. Thanks @chen-zhang-cs-code and @dengluozhang.
+- Config/recovery: skip whole-file last-known-good rollback when invalidity is scoped to `plugins.entries.*`, preserving unrelated user settings during plugin schema or host-version skew. Fixes #71289. Thanks @jalehman.
+- Agents/tools: keep resolved reply-run configs from being overwritten by stale runtime snapshots, and let empty web runtime metadata fall back to configured provider auto-detection so standard and queued turns expose the same tool set. Fixes #71355. Thanks @c-g14.
+- Compaction: honor explicit `agents.defaults.compaction.keepRecentTokens` for manual `/compact`, re-distill safeguard summaries instead of snowballing previous summaries, and enable safeguard summary quality checks by default. Fixes #71357. Thanks @WhiteGiverMa.
+- Sessions: honor configured `session.maintenance` settings during load-time maintenance instead of falling back to default entry caps. Fixes #71356. Thanks @comolago.
 - Browser/sandbox: pass the resolved `browser.ssrfPolicy` into sandbox browser bridges and refresh cached bridges when the effective policy changes, so sandboxed browser navigation honors private-network opt-ins. Fixes #45153 and #57055. Thanks @jzakirov, @zuoanCo, and @kybrcore.
+- Browser/proxy: keep Gateway/provider proxy environment variables from proxying the OpenClaw-managed browser, so `HTTP_PROXY` and `HTTPS_PROXY` no longer block ordinary browser navigation. Fixes #71358. Thanks @Sanjays2402.
+- Agents/MCP: validate draft-2020-12 MCP tool output schemas with a draft-aware bundle-MCP client validator, so external MCP servers no longer fail catalog/tool execution with missing schema refs. Fixes #68772 and #70196. Thanks @mwiesen.
 - Dashboard/Windows: open Control UI and OAuth URLs through the system URL handler without `cmd.exe` parsing or PATH-based `rundll32` lookup, and reject non-HTTP browser-open inputs. Fixes #71098. Thanks @Sanjays2402.
+- Config/doctor: reject legacy `secretref-env:<ENV_VAR>` marker strings on SecretRef credential paths and migrate valid markers to structured env SecretRefs with `openclaw doctor --fix`. Fixes #51794. Thanks @halointellicore.
+- Plugin SDK/browser: export the resolved browser tab-cleanup config type through the browser profile facade, keeping SDK subpath contracts aligned.
 - Providers/OpenAI: separate API-key and Codex sign-in onboarding groups, and avoid replaying stale OpenAI Responses reasoning blocks after a model route switch.
+- Providers/OpenAI-compatible: forward `prompt_cache_key` on Completions requests only for providers that opt in with `compat.supportsPromptCacheKey`, keeping default proxy payloads unchanged. Fixes #69272.
+- Providers/OpenAI-compatible: skip null or non-object streaming chunks from custom providers instead of failing the turn after partial output. Fixes #51112.
+- Providers/OpenAI-compatible: treat singular MLX-style `finish_reason: "tool_call"` as tool use instead of a provider error. Fixes #61499.
+- Plugins/OpenCode: strip unsupported disabled Responses reasoning payloads for OpenCode image understanding. Fixes #70252.
 - Providers/ElevenLabs: omit the MP3-only `Accept` header for PCM telephony synthesis, so Voice Call requests for `pcm_22050` no longer receive MP3 audio. Fixes #67340. Thanks @marcchabot.
+- Providers/MiniMax TTS: mark MP3 output voice-compatible for Telegram voice-note delivery. Fixes #63540.
+- Providers/Microsoft TTS: keep allowlisted bundled speech providers discoverable even when another speech plugin has already registered, so Edge/Microsoft TTS is available alongside OpenAI. Fixes #62117 and #66850.
+- Providers/Microsoft TTS: honor legacy `messages.tts.providers.edge` voice settings after normalizing Edge TTS to the Microsoft provider. Fixes #64153.
+- Providers/OpenRouter: add an OpenRouter TTS provider using the OpenAI-compatible `/audio/speech` endpoint and `OPENROUTER_API_KEY`. Fixes #71268.
+- macOS Talk Mode: retry failed local ElevenLabs stream playback through gateway `talk.speak` before falling back to the system voice, so configured ElevenLabs voices still play when streaming playback fails. Fixes #65662.
+- Plugins/Voice Call: reap stale pre-answer calls by default, honor configured TTS timeouts for Twilio media-stream playback, and fail empty telephony audio instead of completing as silence. Fixes #42071; supersedes #60957. Thanks @Ryce and @sliekens.
+- Plugins/Voice Call: terminate expired restored call sessions with the provider and restart restored max-duration timers with only the remaining duration, preventing stale outbound retry loops after Gateway restarts. Fixes #48739. Thanks @mira-solari.
+- Plugins/Voice Call: start provider STT after Telnyx outbound conversation greetings and pass configured Telnyx voice IDs through to the speak action. Fixes #56091. Thanks @Roshan.
 - Skills: honor legacy `metadata.clawdbot` requirements and installer hints when `metadata.openclaw` is absent, so older skills no longer appear ready when required binaries are missing. Fixes #71323. Thanks @chen-zhang-cs-code.
 - Browser/config: expand `~` in `browser.executablePath` before Chromium launch, so home-relative custom browser paths no longer fail with `ENOENT`. Fixes #67264. Thanks @Quratulain-bilal.
 - Telegram/streaming: hide tool-progress status updates by default while keeping explicit `streaming.preview.toolProgress` opt-in support for edited preview messages. Fixes #71320. Thanks @neeravmakwana.
@@ -84,10 +111,14 @@ Docs: https://docs.openclaw.ai
 - Plugins/Voice Call: coalesce concurrent webhook server starts on the same runtime instance, avoiding a second `listen()` bind when overlapping startup paths race. Thanks @education-01.
 - Plugins/Voice Call: pin voice response sessions to `responseModel` before embedded agent runs, avoiding live-session model switch failures when the global default model differs. Fixes #60118. Thanks @xinbenlv.
 - Plugins/Voice Call: add `agentId` for voice response generation, so phone calls can use a dedicated agent workspace instead of always routing through `main`. Fixes #42155. Thanks @TheOpie.
+- Plugins/Voice Call: scope embedded voice response sandbox resolution to the selected voice agent, so implicit `main` voice sessions respect `agents.defaults.sandbox.mode: "off"` even when other agents define sandboxed Docker binds. Fixes #56367. Thanks @crpol.
 - Media tools: honor the configured web-fetch SSRF policy for media understanding, image/music/video generation references, and PDF inputs, so explicit RFC2544 opt-ins cover WebChat OSS uploads without weakening defaults. Fixes #71300. (#71321) Thanks @neeravmakwana.
 - Agents/TTS: suppress successful spoken transcripts from verbose chat tool output when structured voice media is already queued, while preserving text output for non-builtin tool-name collisions. Fixes #71282. Thanks @neeravmakwana.
 - Plugins/Google Meet: reuse existing Meet tabs and active sessions across harmless URL query differences, avoiding duplicate Chrome windows when agents retry a join. Thanks @steipete.
+- Plugins/Google Meet: tell agents to recover already-open Meet tabs after browser timeouts, and make the dev CLI release its build lock if compiler spawning fails. Thanks @steipete.
+- Plugins/CLI: provide Gateway-backed node inspection to plugin commands, so `googlemeet recover-tab` can inspect paired browser nodes from the terminal. Thanks @steipete.
 - Gateway/sessions: recover main-agent turns interrupted by a gateway restart from stale transcript-lock evidence, avoiding stuck `status: "running"` sessions without broad post-boot transcript scans. Fixes #70555. Thanks @bitloi.
+- Codex approvals: sanitize MCP elicitation approval titles, descriptions, and display parameters before forwarding them to OpenClaw approval prompts. (#71343) Thanks @Lucenx9.
 - Codex approvals: keep command approval responses within Codex app-server `availableDecisions`, including deny/cancel fallbacks for prompts that do not offer `decline`. (#71338) Thanks @Lucenx9.
 - Codex harness: reject same-thread app-server notifications without `turnId` or `turn.id` after a bound turn starts, preventing unscoped events from mutating or completing the active reply. (#71317) Thanks @Lucenx9.
 - Plugins/Google Meet: include live Chrome-node readiness in `googlemeet setup` and document the Parallels recovery checks, so stale node tokens or disconnected VM browsers are visible before an agent opens a meeting. Thanks @steipete.
@@ -193,6 +224,7 @@ Docs: https://docs.openclaw.ai
 - Slack: route native stream fallback replies through the normal chunked sender so long buffered Slack Connect responses are not dropped or duplicated. (#71124) Thanks @martingarramon.
 - WhatsApp: transcribe accepted voice notes before agent dispatch while keeping spoken transcripts out of command authorization. (#64120) Thanks @rogerdigital.
 - Plugins/CLI: expose channel plugin CLI descriptors during discovery-mode plugin loads so snapshot registries keep channel commands visible without activating full runtimes. (#71309) Thanks @gumadeiras.
+- WhatsApp: deliver media generated by tool-result replies while still suppressing text-only tool chatter. (#60968) Thanks @adaclaw.
 
 ## 2026.4.23
 
