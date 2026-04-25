@@ -21,6 +21,7 @@ Docs: https://docs.openclaw.ai
 - Plugins/setup: include `setup.providers[].envVars` in generic provider auth/env lookups and warn non-bundled plugins that still rely on deprecated `providerAuthEnvVars` compatibility metadata. Thanks @vincentkoc.
 - Plugins/setup: derive generic provider setup choices from descriptor-safe `setup.providers[].authMethods` before falling back to setup runtime. Thanks @vincentkoc.
 - Plugins/setup: surface manifest provider auth choices directly in provider setup flow before falling back to setup runtime or install-catalog choices. Thanks @vincentkoc.
+- Models/catalog: centralize manifest model catalog normalization behind a shared `src/model-catalog` contract so future provider index, cache, onboarding, and listing consumers reuse the same validation and row refs. (#71360) Thanks @shakkernerd.
 - Plugins/manifest: add a `modelCatalog` contract for provider-owned model rows, aliases, suppression rules, and discovery mode metadata without loading plugin runtime. (#71342) Thanks @shakkernerd.
 - Plugins/setup: warn when descriptor-only setup plugins still ship ignored setup runtime entries, keeping `setup.requiresRuntime: false` semantics explicit without breaking existing metadata. Thanks @vincentkoc.
 - Plugins/channels: use manifest `channelConfigs` for read-only external channel discovery when no setup entry is available or setup descriptors declare runtime unnecessary. Thanks @vincentkoc.
@@ -57,6 +58,7 @@ Docs: https://docs.openclaw.ai
 - Plugins/Google Meet: add a `chrome-node` transport so a paired macOS node, such as a Parallels VM, can own Chrome, BlackHole, and SoX while the Gateway machine keeps the agent and model key. Thanks @steipete.
 - Plugins/Voice Call: expose the shared `openclaw_agent_consult` realtime tool so live phone calls can ask the full OpenClaw agent for deeper/tool-backed answers. Thanks @steipete.
 - Plugins/Voice Call: add `voicecall setup` and a dry-run-by-default `voicecall smoke` command so Twilio/provider readiness can be checked before placing a live test call. Thanks @steipete.
+- Plugins/Google Meet: add `googlemeet doctor` and a `recover_current_tab`/`recover-tab` flow so agents can inspect an already-open Meet tab and report the blocker without opening another window. Thanks @steipete.
 - Plugins/Bonjour: move LAN Gateway discovery advertising into a default-enabled bundled plugin with its own `@homebridge/ciao` dependency, so users can disable Bonjour without cutting wide-area discovery. Thanks @vincentkoc.
 - Providers/Google: add a Gemini Live realtime voice provider for backend Voice Call and Google Meet audio bridges, with bidirectional audio and function-call support. Thanks @steipete.
 - Plugins/Google Meet: let realtime Meet sessions consult the full OpenClaw agent for deeper answers while staying in the live voice loop. Thanks @steipete.
@@ -65,22 +67,29 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Browser/sandbox: pass the resolved `browser.ssrfPolicy` into sandbox browser bridges and refresh cached bridges when the effective policy changes, so sandboxed browser navigation honors private-network opt-ins. Fixes #45153 and #57055. Thanks @jzakirov, @zuoanCo, and @kybrcore.
 - Dashboard/Windows: open Control UI and OAuth URLs through the system URL handler without `cmd.exe` parsing or PATH-based `rundll32` lookup, and reject non-HTTP browser-open inputs. Fixes #71098. Thanks @Sanjays2402.
 - Providers/OpenAI: separate API-key and Codex sign-in onboarding groups, and avoid replaying stale OpenAI Responses reasoning blocks after a model route switch.
+- Providers/ElevenLabs: omit the MP3-only `Accept` header for PCM telephony synthesis, so Voice Call requests for `pcm_22050` no longer receive MP3 audio. Fixes #67340. Thanks @marcchabot.
+- Skills: honor legacy `metadata.clawdbot` requirements and installer hints when `metadata.openclaw` is absent, so older skills no longer appear ready when required binaries are missing. Fixes #71323. Thanks @chen-zhang-cs-code.
 - Browser/config: expand `~` in `browser.executablePath` before Chromium launch, so home-relative custom browser paths no longer fail with `ENOENT`. Fixes #67264. Thanks @Quratulain-bilal.
 - Telegram/streaming: hide tool-progress status updates by default while keeping explicit `streaming.preview.toolProgress` opt-in support for edited preview messages. Fixes #71320. Thanks @neeravmakwana.
 - Gateway/sessions: copy the oversized `sessions.json` to a rotation backup before the atomic rewrite instead of renaming the live store away, so a crash during rotation keeps the existing session-to-transcript mapping authoritative. Fixes #68229. Thanks @jjjojoj.
+- Providers/OpenAI-compatible: strip OpenAI-only Completions `store` from proxy payloads and allow `extra_body`/`extraBody` passthrough params for provider-specific request fields. Fixes #61826 and #69717.
 - Discord/subagents: preserve thread-bound completion delivery by keeping the requester-agent announce path primary and falling back to direct thread sends only when the announce produces no visible output. (#71064) Thanks @DolencLuka.
 - Browser/tool: give Chrome MCP existing-session manage calls a longer default timeout, pass explicit tool timeouts through tab management, and recover stale selected-page MCP sessions instead of forcing a manual reset. Thanks @steipete.
 - Browser/sandbox: clean up idle tracked tabs opened by primary-agent browser sessions, while preserving active tab reuse and lifecycle cleanup for subagents, cron, and ACP sessions. Fixes #71165. Thanks @dwbutler.
 - Plugins/Voice Call: reuse the webhook runtime across in-process plugin contexts, avoiding `EADDRINUSE` when agent tools or CLI commands run while the Gateway already owns the voice webhook port. Fixes #58115. Thanks @sfbrian.
 - Plugins/Voice Call: answer accepted Telnyx inbound Call Control legs on `call.initiated`, so webhooks that reach OpenClaw no longer leave the caller ringing until hangup. Fixes #58231 and #40131. Thanks @KonsultDigital.
+- Plugins/Voice Call: coalesce concurrent webhook server starts on the same runtime instance, avoiding a second `listen()` bind when overlapping startup paths race. Thanks @education-01.
 - Plugins/Voice Call: pin voice response sessions to `responseModel` before embedded agent runs, avoiding live-session model switch failures when the global default model differs. Fixes #60118. Thanks @xinbenlv.
+- Plugins/Voice Call: add `agentId` for voice response generation, so phone calls can use a dedicated agent workspace instead of always routing through `main`. Fixes #42155. Thanks @TheOpie.
 - Media tools: honor the configured web-fetch SSRF policy for media understanding, image/music/video generation references, and PDF inputs, so explicit RFC2544 opt-ins cover WebChat OSS uploads without weakening defaults. Fixes #71300. (#71321) Thanks @neeravmakwana.
 - Agents/TTS: suppress successful spoken transcripts from verbose chat tool output when structured voice media is already queued, while preserving text output for non-builtin tool-name collisions. Fixes #71282. Thanks @neeravmakwana.
 - Plugins/Google Meet: reuse existing Meet tabs and active sessions across harmless URL query differences, avoiding duplicate Chrome windows when agents retry a join. Thanks @steipete.
 - Gateway/sessions: recover main-agent turns interrupted by a gateway restart from stale transcript-lock evidence, avoiding stuck `status: "running"` sessions without broad post-boot transcript scans. Fixes #70555. Thanks @bitloi.
 - Codex approvals: keep command approval responses within Codex app-server `availableDecisions`, including deny/cancel fallbacks for prompts that do not offer `decline`. (#71338) Thanks @Lucenx9.
+- Codex harness: reject same-thread app-server notifications without `turnId` or `turn.id` after a bound turn starts, preventing unscoped events from mutating or completing the active reply. (#71317) Thanks @Lucenx9.
 - Plugins/Google Meet: include live Chrome-node readiness in `googlemeet setup` and document the Parallels recovery checks, so stale node tokens or disconnected VM browsers are visible before an agent opens a meeting. Thanks @steipete.
 - Context engine: keep safeguard compaction checks active after context-engine windowing and for `ownsCompaction` engines, so large transcripts can compact before prompt submission instead of waiting for provider overflow. Fixes #71325. Thanks @steipete.
 - Approvals: compact structured home-directory paths to `~` across Codex permission prompts and exec approval metadata without repeating them as a separate high-risk warning, while preserving filesystem root and wildcard host warnings. Thanks @steipete.
