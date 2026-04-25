@@ -157,7 +157,6 @@ describe("startSsrFProxy", () => {
     (global as Record<string, unknown>)["GLOBAL_AGENT"] = {
       HTTP_PROXY: "",
       HTTPS_PROXY: "",
-      forceGlobalAgent: true,
     };
 
     const handle = await startSsrFProxy({
@@ -181,6 +180,7 @@ describe("startSsrFProxy", () => {
     expect(agent["HTTP_PROXY"]).toBe("http://previous-global.example.com:8080");
     expect(agent["HTTPS_PROXY"]).toBe("http://previous-global.example.com:8443");
     expect(agent["NO_PROXY"]).toBe("global.corp.example.com");
+    expect(agent["forceGlobalAgent"]).toBeUndefined();
     expect(mockForceResetGlobalDispatcher).toHaveBeenCalledOnce();
   });
 

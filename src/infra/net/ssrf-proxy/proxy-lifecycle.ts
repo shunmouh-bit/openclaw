@@ -96,12 +96,6 @@ function restoreGlobalAgentRuntime(snapshot: ProxyEnvSnapshot): void {
   agent["HTTP_PROXY"] = snapshot["GLOBAL_AGENT_HTTP_PROXY"] ?? "";
   agent["HTTPS_PROXY"] = snapshot["GLOBAL_AGENT_HTTPS_PROXY"] ?? "";
   agent["NO_PROXY"] = snapshot["GLOBAL_AGENT_NO_PROXY"] ?? null;
-  const forceGlobalAgent = snapshot["GLOBAL_AGENT_FORCE_GLOBAL_AGENT"];
-  if (forceGlobalAgent === undefined) {
-    delete agent["forceGlobalAgent"];
-  } else {
-    agent["forceGlobalAgent"] = forceGlobalAgent !== "false";
-  }
 }
 
 function bootstrapNodeHttpStack(proxyUrl: string): void {
@@ -118,7 +112,6 @@ function bootstrapNodeHttpStack(proxyUrl: string): void {
     agent["HTTP_PROXY"] = proxyUrl;
     agent["HTTPS_PROXY"] = proxyUrl;
     agent["NO_PROXY"] = process.env["GLOBAL_AGENT_NO_PROXY"];
-    agent["forceGlobalAgent"] = true;
   }
 }
 
